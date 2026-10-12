@@ -91,7 +91,7 @@ def test_script():
     all_results = []
 
     # import here your trained neural network
-    trained_nn = 'baseline.pth'
+    trained_nn = 'noise_injection.pth'
 
     results = {}
     total_score = 0
@@ -102,8 +102,9 @@ def test_script():
         pole_score = []
 
         for x in range(10):
-
+            # Uncomment to train visually or not
             env = gym.make('CartPole-v1')
+            # env = gym.make('CartPole-v1', render_mode="human")
             env.unwrapped.length = length
 
             state_dim = env.observation_space.shape[0]

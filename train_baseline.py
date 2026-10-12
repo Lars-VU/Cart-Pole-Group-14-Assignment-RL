@@ -47,10 +47,10 @@ def train_baseline():
     target_network.eval()
 
     # Initialize the Adam optimizer, with learning rate 1e-3
-    optimizer = optim.Adam(policy_network.parameters(), lr=0.001)
+    optimizer = optim.Adam(policy_network.parameters(), lr=0.0001)
 
     # Initialize replay buffer object with 50000 capacity
-    replay = ReplayBuffer(capacity=50000)
+    replay = ReplayBuffer(capacity=100000)
 
     # Hyperparameters
     epsilon = 1.0
@@ -58,7 +58,7 @@ def train_baseline():
     epsilon_decay = 0.999
     gamma = 0.99
     batch_size = 64
-    num_episodes = 1000
+    num_episodes = 2000
 
     # Store rewards for learning curve
     episode_rewards = []
