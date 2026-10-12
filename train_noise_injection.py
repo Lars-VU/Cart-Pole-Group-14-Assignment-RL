@@ -46,10 +46,10 @@ def train_noise_injection():
     target_network.load_state_dict(policy_network.state_dict())
     target_network.eval()
 
-    # Initialize the Adam optimizer, with learning rate 1e-4
-    optimizer = optim.Adam(policy_network.parameters(), lr=0.0001)
+    # Initialize the Adam optimizer, with learning rate 1e-3
+    optimizer = optim.Adam(policy_network.parameters(), lr=0.001)
 
-    # Initialize replay buffer object with 50000 capacity
+    # Initialize replay buffer object with 100000 capacity
     replay = ReplayBuffer(capacity=100000)
 
     # Hyperparameters
@@ -58,7 +58,9 @@ def train_noise_injection():
     epsilon_decay = 0.999
     gamma = 0.99
     batch_size = 64
-    num_episodes = 2000
+    num_episodes = 3000
+
+    pole_lengths = np.linspace(0.4, 1.8, 30)
 
     # standard deviation for noise (sigma)
     noise_std = 0.01
@@ -69,8 +71,8 @@ def train_noise_injection():
     start_time = time.time()
 
     for episode in range(num_episodes):
-        # Change pole length uniformly
-        env.unwrapped.length = np.random.uniform(0.4, 1.8)
+        # Change pole length randomly
+        env.unwrapped.length = np.random.choice(pole_lengths)
 
         state = env.reset()[0]
         total_reward = 0

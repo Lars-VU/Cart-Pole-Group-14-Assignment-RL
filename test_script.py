@@ -91,7 +91,7 @@ def test_script():
     all_results = []
 
     # import here your trained neural network
-    trained_nn = 'noise_injection.pth'
+    trained_nn = 'per.pth'
 
     results = {}
     total_score = 0

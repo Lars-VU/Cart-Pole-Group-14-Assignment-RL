@@ -47,9 +47,9 @@ def train_baseline():
     target_network.eval()
 
     # Initialize the Adam optimizer, with learning rate 1e-3
-    optimizer = optim.Adam(policy_network.parameters(), lr=0.0001)
+    optimizer = optim.Adam(policy_network.parameters(), lr=0.001)
 
-    # Initialize replay buffer object with 50000 capacity
+    # Initialize replay buffer object with 100000 capacity
     replay = ReplayBuffer(capacity=100000)
 
     # Hyperparameters
@@ -58,7 +58,8 @@ def train_baseline():
     epsilon_decay = 0.999
     gamma = 0.99
     batch_size = 64
-    num_episodes = 2000
+    num_episodes = 3000
+    pole_lengths = np.linspace(0.4, 1.8, 30)
 
     # Store rewards for learning curve
     episode_rewards = []
@@ -66,8 +67,8 @@ def train_baseline():
     start_time = time.time()
 
     for episode in range(num_episodes):
-        # Change pole length uniformly
-        env.unwrapped.length = np.random.uniform(0.4, 1.8)
+        # Change pole length randomly
+        env.unwrapped.length = np.random.choice(pole_lengths)
 
         state = env.reset()[0]
         state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
