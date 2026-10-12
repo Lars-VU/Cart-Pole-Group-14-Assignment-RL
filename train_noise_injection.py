@@ -11,6 +11,14 @@ import time
 
 from test_script import QNetwork
 
+# Set random seeds for complete reproducibility across runs
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
@@ -35,6 +43,8 @@ class ReplayBuffer:
         return len(self.buffer)
 
 def train_noise_injection():
+    set_seed(42)
+
     env = gym.make('CartPole-v1')
 
     state_dim = env.observation_space.shape[0]
@@ -49,8 +59,8 @@ def train_noise_injection():
     # Initialize the Adam optimizer, with learning rate 1e-3
     optimizer = optim.Adam(policy_network.parameters(), lr=0.001)
 
-    # Initialize replay buffer object with 100000 capacity
-    replay = ReplayBuffer(capacity=100000)
+    # Initialize replay buffer object with 50000 capacity
+    replay = ReplayBuffer(capacity=50000)
 
     # Hyperparameters
     epsilon = 1.0

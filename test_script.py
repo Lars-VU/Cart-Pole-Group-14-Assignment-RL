@@ -23,6 +23,37 @@ class QNetwork(nn.Module):
         x = torch.relu(self.fc2(x))
         return self.fc3(x)
 
+def plot_training_curves():
+    """
+    Automatically loads the training reward files and plots a comparative learning curve.
+    """
+    models = {
+        "Baseline": "weights/baseline_rewards.npy",
+        "Noise Injection": "weights/noise_injection_rewards.npy",
+        "PER": "weights/PER_rewards.npy"
+    }
+
+    plt.figure(figsize=(10, 5))
+    window = 50  # Moving average window for smoothing out noise
+
+    for name, path in models.items():
+        if os.path.exists(path):
+            rewards = np.load(path)
+            # Calculate moving average for a clean trend line
+            if len(rewards) >= window:
+                filtered_rewards = np.convolve(rewards, np.ones(window)/window, mode='valid')
+                plt.plot(filtered_rewards, label=f"{name} (Mov. Avg)")
+            else:
+                plt.plot(rewards, label=name, alpha=0.3)
+
+    plt.xlabel('Episodes')
+    plt.ylabel('Total Reward (Smoothed)')
+    plt.title('Training Performance Comparison Across Strategies')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig("weights/training_curves_comparison.png")
+    plt.show()
+    print("Saved comparative training curve to weights/training_curves_comparison.png")
 
 def bar_plot(results):
     data = results[0]
@@ -81,6 +112,90 @@ def test_pole_length(env, q_network):
     return total_reward
 
 
+def evaluate_all_models():
+    pole_lengths = np.linspace(0.4, 1.8, 30)
+
+    # List of models found in your weights folder
+    model_files = {
+        "Baseline": "baseline.pth",
+        "Noise Injection": "noise_injection.pth",
+        "PER": "PER.pth"
+    }
+
+    state_dim = 4
+    action_dim = 2
+
+    for model_name, filename in model_files.items():
+        weight_path = os.path.join("weights", filename)
+        if not os.path.exists(weight_path):
+            print(f"Skipping {model_name}: {weight_path} not found.")
+            continue
+
+        print(f"\n--- Evaluating Model: {model_name} ({filename}) ---")
+
+        # Load model once
+        loaded_model = QNetwork(state_dim, action_dim)
+        loaded_model.load_state_dict(torch.load(weight_path, weights_only=True))
+        loaded_model.eval()
+
+        results = {}
+        all_pole_scores = []
+        total_score = 0
+
+        for length in pole_lengths:
+            pole_score = []
+            for x in range(10):
+                env = gym.make('CartPole-v1')
+                env.unwrapped.length = length
+                score = test_pole_length(env, loaded_model)
+                pole_score.append(score)
+
+            mean_score = np.mean(pole_score)
+            std_score = np.std(pole_score)
+            min_score = np.min(pole_score)
+            max_score = np.max(pole_score)
+
+            total_score += mean_score
+
+            key = round(length, 2)
+            results[f"Avg_{key}"] = mean_score
+            results[f"Std_{key}"] = std_score
+            results[f"Min_{key}"] = min_score
+            results[f"Max_{key}"] = max_score
+
+            all_pole_scores.extend(pole_score)
+
+        results["Total_Avg"] = total_score
+
+        # Save individual Excel sheet per model
+        df = pd.DataFrame([results])
+        excel_name = f"weights/{model_name.lower().replace(' ', '_')}_results.xlsx"
+        df.to_excel(excel_name, index=False)
+        print(f"Saved evaluation data to {excel_name}")
+
+        # Generate Bar Plot for this model
+        avgs = {k: v for k, v in results.items() if k.startswith('Avg_')}
+        stds = {k.replace('Avg', 'Std'): results[k.replace('Avg', 'Std')] for k in avgs.keys()}
+        sorted_keys = sorted(avgs.keys(), key=lambda x: float(x.split('_')[1]))
+        avg_values = [avgs[k] for k in sorted_keys]
+        std_values = [stds[k.replace('Avg', 'Std')] for k in sorted_keys]
+        overall_avg = np.mean(avg_values)
+
+        plt.figure(figsize=(9, 5))
+        plt.bar(range(len(avg_values)), avg_values, yerr=std_values, capsize=4, alpha=0.7, color='steelblue')
+        plt.xticks(range(len(avg_values)), [k.split('_')[1] for k in sorted_keys], rotation=45)
+        plt.xlabel('Pole Length (m)')
+        plt.ylabel('Episode Length (Steps)')
+        plt.title(f'{model_name} - Overall Avg Score = {round(overall_avg, 1)}')
+        plt.tight_layout()
+
+        plot_name = f"weights/{model_name.lower().replace(' ', '_')}_bar_plot.png"
+        plt.savefig(plot_name)
+        plt.show()
+        print(f"Saved bar plot to {plot_name}")
+
+    # Generate comparative training curves from the .npy files
+    plot_training_curves()
 
 def test_script():
     """
@@ -91,7 +206,7 @@ def test_script():
     all_results = []
 
     # import here your trained neural network
-    trained_nn = 'per.pth'
+    trained_nn = 'PER.pth'
 
     results = {}
     total_score = 0
@@ -135,4 +250,4 @@ def test_script():
     df.to_excel("experiment_results.xlsx", index=False)
 
 if __name__ == "__main__":
-    test_script()
+    evaluate_all_models()

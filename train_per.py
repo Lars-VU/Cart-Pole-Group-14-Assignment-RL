@@ -11,6 +11,14 @@ import time
 
 from test_script import QNetwork
 
+# Set random seeds for complete reproducibility across runs
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+
 class PrioritizedReplayBuffer:
     def __init__(self, capacity, alpha=0.6):
         self.capacity = capacity
@@ -72,6 +80,8 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
 
 def train_per():
+    set_seed(42)
+
     env = gym.make('CartPole-v1')
 
     state_dim = env.observation_space.shape[0]
@@ -86,8 +96,8 @@ def train_per():
     # Initialize the Adam optimizer, with learning rate 1e-3
     optimizer = optim.Adam(policy_network.parameters(), lr=0.001)
 
-    # Initialize replay buffer object with 100000 capacity
-    replay = PrioritizedReplayBuffer(capacity=10000, alpha=0.6)
+    # Initialize replay buffer object with 50000 capacity
+    replay = PrioritizedReplayBuffer(capacity=50000, alpha=0.6)
 
     # Hyperparameters
     epsilon = 1.0
@@ -106,8 +116,6 @@ def train_per():
     episode_rewards = []
 
     start_time = time.time()
-
-    total_steps = 0
 
     for episode in range(num_episodes):
         # Calculate current beta for weight scaling
@@ -176,8 +184,6 @@ def train_per():
 
         # Decay the exploration rate
         epsilon = max(epsilon * epsilon_decay, epsilon_end)
-
-        total_steps += 1
 
         # Update target network weights every 10 episodes, they can't stay the starting weight forever
         if episode % 10 == 0:
