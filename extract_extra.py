@@ -18,11 +18,7 @@ header = (
     f"{'Strategy':<18} | {'Overall Mean':<12} | {'Early Mean (1k)':<16} | " +
     " | ".join([f"{'Ep to ' + str(t):<10}" for t in thresholds])
 )
-print("=" * len(header))
 print("SAMPLE EFFICIENCY & CONVERGENCE SUMMARY")
-print("=" * len(header))
-print(header)
-print("-" * len(header))
 
 for name, path in models.items():
     if not os.path.exists(path):
@@ -56,5 +52,3 @@ for name, path in models.items():
 
     crossings_str = " | ".join(crossings)
     print(f"{name:<18} | {overall_mean:<12.2f} | {early_mean_1k:<16.2f} | {crossings_str}")
-
-print("=" * len(header))
