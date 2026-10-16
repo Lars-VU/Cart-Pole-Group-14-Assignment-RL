@@ -10,7 +10,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-SEED = 43
+SEED = 42
 
 
 def set_seed(seed=SEED):
@@ -127,6 +127,7 @@ def test_pole_length(env, q_network):
 
 
 def compute_significance(scores_baseline, scores_variant):
+    # We use this to compute the statistical significance, used in the report
     t_stat, p_val = stats.ttest_ind(scores_baseline, scores_variant, equal_var=False)
     return t_stat, p_val
 
@@ -226,21 +227,66 @@ def evaluate_all_models():
     # Generate comparative training curves from the .npy files
     plot_training_curves()
 
-    # Calculate the statistical significance
+    # Calculate the statistical significance, used in the report. 
     if "Baseline" in raw_scores_by_model:
         baseline_scores = raw_scores_by_model["Baseline"]
-        print("\n" + "="*50)
-        print("STATISTICAL SIGNIFICANCE TESTING (Welch's t-test)")
-        print("="*50)
+        print("Welch's t-test")
 
         for model_name, variant_scores in raw_scores_by_model.items():
             if model_name != "Baseline":
                 t_stat, p_val = compute_significance(baseline_scores, variant_scores)
                 sig_text = "Statistically Significant (p < 0.05)" if p_val < 0.05 else "Not Significant (p >= 0.05)"
                 print(f"Baseline vs {model_name}:")
-                print(f"  t-statistic = {t_stat:.4f}")
-                print(f"  p-value     = {p_val:.4e}")
-                print(f"  Result      = {sig_text}\n")
+                print(f"t-statistic = {t_stat:.4f}")
+                print(f"p-value = {p_val:.4e}")
+                print(f"Result = {sig_text}\n")
+
+    # Configuration, 100-200-300 episodes 
+    thresholds = [100, 200, 300]
+    window = 50
+
+    # The table header for displaying the statistics, making it visible what is what
+    header = (
+        f"{'Strategy':<18} | {'Overall Mean':<12} | {'Early Mean (1k)':<16} | " +
+        " | ".join([f"{'Ep to ' + str(t):<10}" for t in thresholds])
+    )
+
+    print("sample efficiency & convergence")
+    print(header)
+
+    for name, path in model_files.items():
+        if not os.path.exists(path):
+            print(f"{name:<18} | File not found: {path}")
+            continue
+            
+        rewards = np.load(path)
+        total_episodes = len(rewards)
+        
+        # Calculate the Overall Mean Reward across all episodes
+        overall_mean = np.mean(rewards)
+        
+        # Calculate the Early mean reward (First 1,000 episodes)
+        early_mean_1k = np.mean(rewards[:min(1000, total_episodes)])
+        
+        # Calculate moving average for threshold crossings
+        if total_episodes >= window:
+            mov_avg = np.convolve(rewards, np.ones(window) / window, mode='valid')
+        else:
+            mov_avg = rewards
+            
+        crossings = []
+        for t in thresholds:
+            indices = np.where(mov_avg >= t)[0]
+            if len(indices) > 0:
+                # Add window size to convert moving average index back to episode number
+                ep_num = str(indices[0] + window)
+            else:
+                # If the model hasn't reached it
+                ep_num = "N/A"
+            crossings.append(f"{ep_num:<10}")
+
+        crossings_str = " | ".join(crossings)
+        print(f"{name:<18} | {overall_mean:<12.2f} | {early_mean_1k:<16.2f} | {crossings_str}")
 
 
 def test_script():

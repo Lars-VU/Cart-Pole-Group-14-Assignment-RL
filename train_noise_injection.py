@@ -11,9 +11,11 @@ import time
 
 from test_script import QNetwork
 
-SEED = 43
+# THE SEEEED
+SEED = 42
 
-
+# We are using a seed to make the training somewhat more reproducable, 
+# test results will likely still be a bit different.
 def set_seed(seed=SEED):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -24,6 +26,7 @@ def set_seed(seed=SEED):
     torch.backends.cudnn.benchmark = False
 
 class ReplayBuffer:
+    # This is the replay buffer, standard for the deep q learning algorithm
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
 
@@ -76,12 +79,15 @@ def train_noise_injection():
     num_episodes = 2000
 
     pole_lengths = np.linspace(0.4, 1.8, 30)
+    moving_average_window = 50
 
     # standard deviation for noise (sigma)
     noise_std = 0.01
 
     # Store rewards for learning curve
     episode_rewards = []
+    best_moving_avg = -np.inf
+    os.makedirs("weights", exist_ok=True)
 
     start_time = time.time()
 
@@ -159,12 +165,18 @@ def train_noise_injection():
 
         episode_rewards.append(total_reward)
 
+        # We need to set the new peak average here, used for saving the model at the right (most performant) point
+        if len(episode_rewards) >= moving_average_window:
+            current_moving_avg = np.mean(episode_rewards[-moving_average_window:])
+            if current_moving_avg > best_moving_avg:
+                best_moving_avg = current_moving_avg
+                # Save the model
+                torch.save(policy_network.state_dict(), "weights/noise_injection_best.pth")
         print(
             f'Episode {episode}, Pole Length: {env.unwrapped.length}, Total Reward: {total_reward}, Epsilon: {epsilon}'
         )
 
     # Save models and data
-    os.makedirs("weights", exist_ok=True)
     torch.save(policy_network.state_dict(), "weights/noise_injection.pth")
     np.save("weights/noise_injection_rewards.npy", np.array(episode_rewards))
     print('Training finished for noise_injection model')
