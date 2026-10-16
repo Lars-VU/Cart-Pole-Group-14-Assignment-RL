@@ -3,11 +3,24 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+from scipy import stats
 import gymnasium as gym
 from collections import deque
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+
+SEED = 43
+
+
+def set_seed(seed=SEED):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
 
 
 # This is the 'standard' neural network
@@ -22,6 +35,7 @@ class QNetwork(nn.Module):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         return self.fc3(x)
+
 
 def plot_training_curves():
     """
@@ -112,7 +126,13 @@ def test_pole_length(env, q_network):
     return total_reward
 
 
+def compute_significance(scores_baseline, scores_variant):
+    t_stat, p_val = stats.ttest_ind(scores_baseline, scores_variant, equal_var=False)
+    return t_stat, p_val
+
+
 def evaluate_all_models():
+    set_seed()
     pole_lengths = np.linspace(0.4, 1.8, 30)
 
     # List of models found in your weights folder
@@ -124,6 +144,9 @@ def evaluate_all_models():
 
     state_dim = 4
     action_dim = 2
+
+    # Dictionary to store the 300 raw scores for each model
+    raw_scores_by_model = {}
 
     for model_name, filename in model_files.items():
         weight_path = os.path.join("weights", filename)
@@ -142,10 +165,13 @@ def evaluate_all_models():
         all_pole_scores = []
         total_score = 0
 
-        for length in pole_lengths:
+        for length_index, length in enumerate(pole_lengths):
             pole_score = []
             for x in range(10):
                 env = gym.make('CartPole-v1')
+                evaluation_seed = SEED + (length_index * 10) + x
+                env.action_space.seed(evaluation_seed)
+                env.reset(seed=evaluation_seed)
                 env.unwrapped.length = length
                 score = test_pole_length(env, loaded_model)
                 pole_score.append(score)
@@ -166,6 +192,9 @@ def evaluate_all_models():
             all_pole_scores.extend(pole_score)
 
         results["Total_Avg"] = total_score
+
+        # Save raw 300 scores for significance testing
+        raw_scores_by_model[model_name] = all_pole_scores
 
         # Save individual Excel sheet per model
         df = pd.DataFrame([results])
@@ -196,6 +225,23 @@ def evaluate_all_models():
 
     # Generate comparative training curves from the .npy files
     plot_training_curves()
+
+    # Calculate the statistical significance
+    if "Baseline" in raw_scores_by_model:
+        baseline_scores = raw_scores_by_model["Baseline"]
+        print("\n" + "="*50)
+        print("STATISTICAL SIGNIFICANCE TESTING (Welch's t-test)")
+        print("="*50)
+
+        for model_name, variant_scores in raw_scores_by_model.items():
+            if model_name != "Baseline":
+                t_stat, p_val = compute_significance(baseline_scores, variant_scores)
+                sig_text = "Statistically Significant (p < 0.05)" if p_val < 0.05 else "Not Significant (p >= 0.05)"
+                print(f"Baseline vs {model_name}:")
+                print(f"  t-statistic = {t_stat:.4f}")
+                print(f"  p-value     = {p_val:.4e}")
+                print(f"  Result      = {sig_text}\n")
+
 
 def test_script():
     """
@@ -248,6 +294,7 @@ def test_script():
     # Convert list to DataFrame
     df = pd.DataFrame(all_results)
     df.to_excel("experiment_results.xlsx", index=False)
+
 
 if __name__ == "__main__":
     evaluate_all_models()

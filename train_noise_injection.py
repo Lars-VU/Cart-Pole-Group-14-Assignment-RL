@@ -11,13 +11,17 @@ import time
 
 from test_script import QNetwork
 
-# Set random seeds for complete reproducibility across runs
-def set_seed(seed=42):
+SEED = 43
+
+
+def set_seed(seed=SEED):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -43,9 +47,10 @@ class ReplayBuffer:
         return len(self.buffer)
 
 def train_noise_injection():
-    set_seed(42)
+    set_seed()
 
     env = gym.make('CartPole-v1')
+    env.action_space.seed(SEED)
 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -68,7 +73,7 @@ def train_noise_injection():
     epsilon_decay = 0.999
     gamma = 0.99
     batch_size = 64
-    num_episodes = 3000
+    num_episodes = 2000
 
     pole_lengths = np.linspace(0.4, 1.8, 30)
 
@@ -84,7 +89,7 @@ def train_noise_injection():
         # Change pole length randomly
         env.unwrapped.length = np.random.choice(pole_lengths)
 
-        state = env.reset()[0]
+        state = env.reset(seed=SEED + episode)[0]
         total_reward = 0
         terminated = False
         truncated = False
@@ -107,8 +112,10 @@ def train_noise_injection():
             # Retrieve next state/information
             next_state, reward, terminated, truncated, _ = env.step(action)
 
+            noisy_next_state = next_state + np.random.normal(0, noise_std, size=next_state.shape)
+
             # Store transition in replay buffer
-            replay.add(noisy_state, action, reward, next_state, (terminated or truncated))
+            replay.add(noisy_state, action, reward, noisy_next_state, terminated)
 
             state = next_state
             total_reward += reward
@@ -120,7 +127,7 @@ def train_noise_injection():
                 states = torch.tensor(states, dtype=torch.float32)
                 actions = torch.tensor(actions)
                 rewards = torch.tensor(rewards)
-                next_states = torch.tensor(next_states)
+                next_states = torch.tensor(next_states, dtype=torch.float32)
                 dones = torch.tensor(dones, dtype=torch.float32)
 
                 # Get all Q values of the batch

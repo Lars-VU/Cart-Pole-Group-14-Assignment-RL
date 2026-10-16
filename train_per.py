@@ -11,13 +11,17 @@ import time
 
 from test_script import QNetwork
 
-# Set random seeds for complete reproducibility across runs
-def set_seed(seed=42):
+SEED = 43
+
+
+def set_seed(seed=SEED):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.benchmark = False
 
 class PrioritizedReplayBuffer:
     def __init__(self, capacity, alpha=0.6):
@@ -80,9 +84,10 @@ class PrioritizedReplayBuffer:
         return len(self.buffer)
 
 def train_per():
-    set_seed(42)
+    set_seed()
 
     env = gym.make('CartPole-v1')
+    env.action_space.seed(SEED)
 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -105,7 +110,7 @@ def train_per():
     epsilon_decay = 0.999
     gamma = 0.99
     batch_size = 64
-    num_episodes = 3000
+    num_episodes = 2000
     pole_lengths = np.linspace(0.4, 1.8, 30)
 
     # Start with lower beta, work up to 1
@@ -125,13 +130,14 @@ def train_per():
         # Change pole length randomly
         env.unwrapped.length = np.random.choice(pole_lengths)
 
-        state = env.reset()[0]
-        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        state = env.reset(seed=SEED + episode)[0]
         total_reward = 0
         terminated = False
         truncated = False
 
         while not (terminated or truncated):
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+
             # Epsilon-greedy exploration
             if random.random() < epsilon:
                 # Exploration
@@ -146,7 +152,7 @@ def train_per():
             next_state, reward, terminated, truncated, _ = env.step(action)
 
             # Store transition in replay buffer
-            replay.add(state, action, reward, next_state, (terminated or truncated))
+            replay.add(state, action, reward, next_state, terminated)
 
             state = next_state
             total_reward += reward
@@ -173,6 +179,9 @@ def train_per():
                 next_q_values = target_network(next_states).max(1)[0]
                 # 1 - dones to not calculate future rewards if terminated, it only needs immediate reward then
                 target_q_values = rewards + (gamma * next_q_values * (1 - dones))
+
+                td_errors = (target_q_values - q_values).detach().cpu().numpy()
+                replay.update_priorities(indices, td_errors)
 
                 # Calculate Mean Squared Error (MSE) loss L(theta) = 1/B * sum(w_i * (target - Q)^2)
                 loss = (weights * nn.MSELoss(reduction='none')(q_values, target_q_values)).mean()
